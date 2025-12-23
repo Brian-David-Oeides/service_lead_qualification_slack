@@ -9,6 +9,8 @@ app.use(express.json()); // for JSON bodies
 
 const PORT = process.env.PORT || 3000;
 
+const nodemailer = require("nodemailer");
+
 const slackToken = process.env.SLACK_BOT_TOKEN;
 const slackChannelId = process.env.SLACK_CHANNEL_ID;
 
@@ -18,6 +20,52 @@ if (!slackToken || !slackChannelId) {
 }
 
 const slack = new WebClient(slackToken);
+
+const smtpHost = process.env.SMTP_HOST;
+const smtpPort = Number(process.env.SMTP_PORT || 587);
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+const smtpFrom = process.env.SMTP_FROM;
+
+if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom) {
+  console.error("Missing SMTP_* vars in .env");
+  process.exit(1);
+}
+
+const mailer = nodemailer.createTransport({
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpPort === 465, // true only for 465
+  auth: {
+    user: smtpUser,
+    pass: smtpPass
+  }
+});
+
+function isLikelyEmail(value = "") {
+  const v = String(value).trim();
+  return v.includes("@") && v.includes(".") && v.length >= 6;
+}
+
+async function sendHighLeadAutoResponse(toEmail) {
+  const subject = "Thanks — we received your inquiry";
+  const text =
+`Hi,
+
+Thanks for reaching out. We’ve received your message and will review it shortly.
+
+If everything looks aligned, someone from our team will follow up within one business day.
+
+Best regards,`;
+
+  return mailer.sendMail({
+    from: smtpFrom,
+    to: toEmail,
+    subject,
+    text
+  });
+}
+
 
 // Health check
 app.get("/health", (req, res) => {
@@ -131,6 +179,20 @@ app.post("/lead", async (req, res) => {
 
   const { label, reasons, scores } = classifyLead(message);
 
+  let emailStatus = "not_sent";
+  let emailError = null;
+
+  if (label === "HIGH" && isLikelyEmail(email)) {
+    try {
+      await sendHighLeadAutoResponse(email);
+      emailStatus = "sent";
+    } catch (err) {
+      emailStatus = "failed";
+      emailError = err?.message || "email error";
+    }
+  }
+
+
   // Very simple short summary: first 140 chars
   const summary = (message || "").trim().slice(0, 140) + ((message || "").length > 140 ? "…" : "");
 
@@ -138,7 +200,7 @@ app.post("/lead", async (req, res) => {
     await slack.chat.postMessage({
       channel: slackChannelId,
       text: `${label === "HIGH" ? "🟢" : "🔴"} *LEAD: ${label}*\n` +
-      `*Score:* ${scores.netScore} (high ${scores.highScore} / low ${scores.lowScore})\n` +
+      `*Score:* ${scores.netScore} (high ${scores.highScore} / low ${scores.lowScore})\n` + `*Auto-response:* ${emailStatus}${emailError ? ` (${emailError})` : ""}\n` +
       `*Reasons:* ${(label === "HIGH" ? reasons.high : reasons.low).join(", ") || "No keyword match"}\n` +
       `*Email:* ${email || "N/A"}\n` +
       `*Phone:* ${phone || "N/A"}\n` +
