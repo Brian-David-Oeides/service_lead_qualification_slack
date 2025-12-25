@@ -1,87 +1,151 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lead Intake</title>
-    <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; max-width: 720px; }
-      label { display:block; margin: 14px 0 6px; font-weight: 600; }
-      input, textarea { width: 100%; padding: 10px; font-size: 16px; }
-      button { margin-top: 14px; padding: 10px 14px; font-size: 16px; cursor: pointer; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .status { margin-top: 14px; padding: 10px; border: 1px solid #ddd; }
-      .muted { color:#666; font-size: 13px; margin-top: 6px;}
-    </style>
-  </head>
-  <body>
-    <h1>Lead Intake</h1>
-    <p class="muted">This posts directly into your lead qualifier backend.</p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lead Intake</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    h1 { margin: 0 0 10px; }
+    .row { display: flex; gap: 16px; }
+    .col { flex: 1; }
+    label { display:block; font-weight:700; margin:16px 0 6px; }
+    input, textarea, button { width: 100%; padding: 12px; font-size: 16px; }
+    textarea { min-height: 180px; }
+    button { width:auto; padding: 12px 18px; cursor:pointer; }
+    .status { margin: 16px 0; padding: 12px; border: 1px solid #ccc; background: #f7f7f7; }
+    .status.ok { border-color: #2e7d32; background: #e8f5e9; }
+    .status.err { border-color: #c62828; background: #ffebee; }
+    .small { color:#555; margin-top: 6px; }
+    .hp { position:absolute; left:-10000px; top: auto; width: 1px;height: 1px; overflow: hidden; } /* honeypot hidden */
+  </style>
+</head>
+<body>
+  <h1>Lead Intake</h1>
+  <p class="small">This posts directly into your lead qualifier backend.</p>
 
-    <form id="leadForm">
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" placeholder="name@company.com" required />
+  <div id="status" class="status" style="display:none;"></div>
 
-      <div class="row">
-        <div>
-          <label for="phone">Phone</label>
-          <input id="phone" name="phone" type="tel" placeholder="+1..." />
-        </div>
-        <div>
-          <label for="whatsapp">WhatsApp</label>
-          <input id="whatsapp" name="whatsapp" type="tel" placeholder="+66..." />
-        </div>
+  <form id="leadForm" novalidate>
+    <label>Email</label>
+    <input id="email" name="email" type="email" placeholder="name@company.com" autocomplete="email" />
+
+    <div class="row">
+      <div class="col">
+        <label>Phone</label>
+        <input id="phone" name="phone" type="tel" placeholder="+1..." autocomplete="tel" />
       </div>
+      <div class="col">
+        <label>WhatsApp</label>
+        <input id="whatsapp" name="whatsapp" type="tel" placeholder="+66..." />
+      </div>
+    </div>
 
-      <label for="message">Message</label>
-      <textarea id="message" name="message" rows="7" placeholder="Tell us what you need..." required></textarea>
+    <!-- Honeypot (bots often fill this; humans won’t see it) -->
+    <div class="hp-field" aria-hidden="true">
+    <label for="company_website">Company Website</label>
+    <input
+        type="text"
+        id="company_website"
+        name="company_website"
+        autocomplete="off"
+        tabindex="-1"
+        value=""
+    />
+    </div>
 
-      <button type="submit">Submit Lead</button>
-    </form>
 
-    <div id="status" class="status" style="display:none;"></div>
+    <label>Message <span class="small">(required)</span></label>
+    <textarea id="message" name="message" placeholder="Tell us what you need..." required></textarea>
 
-    <script>
-      const form = document.getElementById("leadForm");
-      const statusBox = document.getElementById("status");
+    <div style="margin-top:16px;">
+      <button id="submitBtn" type="submit">Submit Lead</button>
+    </div>
 
-      function setStatus(text) {
-        statusBox.style.display = "block";
-        statusBox.textContent = text;
-      }
+    <p class="small">
+      Required: Message + at least one of (Email / Phone / WhatsApp).
+    </p>
+  </form>
 
-      form.addEventListener("submit", async (e) => {
+  <script>
+    const form = document.getElementById("leadForm");
+    const statusEl = document.getElementById("status");
+    const btn = document.getElementById("submitBtn");
+
+    function setStatus(kind, text) {
+        statusEl.className = "status " + (kind === "ok" ? "ok" : "err");
+        statusEl.textContent = text;
+        statusEl.style.display = "block";
+    }
+
+    form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const payload = {
-          email: document.getElementById("email").value.trim(),
-          phone: document.getElementById("phone").value.trim(),
-          whatsapp: document.getElementById("whatsapp").value.trim(),
-          message: document.getElementById("message").value.trim(),
-        };
+        statusEl.style.display = "none";
 
-        setStatus("Submitting...");
+        const email = document.getElementById("email").value.trim();
+        const phone = document.getElementById("phone").value.trim();
+        const whatsapp = document.getElementById("whatsapp").value.trim();
+        const message = document.getElementById("message").value.trim();
+
+        // Honeypot: should be EMPTY for humans
+        // (previous instruction: name it company_website)
+        const company_website =
+        (document.getElementById("company_website")?.value || "").trim();
+
+        // Front-end validation
+        if (!message) {
+        setStatus("err", "Message is required.");
+        return;
+        }
+        if (!email && !phone && !whatsapp) {
+        setStatus(
+            "err",
+            "Please provide at least one contact method: Email, Phone, or WhatsApp."
+        );
+        return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Sending...";
 
         try {
-          const res = await fetch("/lead", {
+        const payload = {
+            email,
+            phone,
+            whatsapp,
+            message,
+
+            // honeypot field (bots often fill hidden inputs)
+            company_website: company_website || ""
+        };
+
+        const resp = await fetch("/lead", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
+            body: JSON.stringify(payload)
+        });
 
-          const data = await res.json().catch(() => ({}));
+        const data = await resp.json().catch(() => ({}));
 
-          if (!res.ok) {
-            setStatus(`Error (${res.status}): ${data.error || "Request failed"}`);
-            return;
-          }
-
-          setStatus(`Submitted. Label: ${data.label || "N/A"} | Score: ${data?.scores?.netScore ?? "N/A"}`);
-          form.reset();
-        } catch (err) {
-          setStatus(`Network error: ${err?.message || err}`);
+        if (!resp.ok || data.ok !== true) {
+            const msg = data?.error || "Submission failed. Check server logs.";
+            setStatus("err", msg);
+        } else if (data.ignored) {
+            // Server accepted but intentionally ignored (honeypot tripped)
+            setStatus("ok", "Submitted.");
+            form.reset();
+        } else {
+            setStatus("ok", `Submitted. Lead classified as: ${data.label}`);
+            form.reset();
         }
-      });
+        } catch (err) {
+        setStatus("err", err?.message || "Network error.");
+        } finally {
+        btn.disabled = false;
+        btn.textContent = "Submit Lead";
+        }
+    });
     </script>
-  </body>
+</body>
 </html>
