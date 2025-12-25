@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lead Intake</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; max-width: 720px; }
+      label { display:block; margin: 14px 0 6px; font-weight: 600; }
+      input, textarea { width: 100%; padding: 10px; font-size: 16px; }
+      button { margin-top: 14px; padding: 10px 14px; font-size: 16px; cursor: pointer; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .status { margin-top: 14px; padding: 10px; border: 1px solid #ddd; }
+      .muted { color:#666; font-size: 13px; margin-top: 6px;}
+    </style>
+  </head>
+  <body>
+    <h1>Lead Intake</h1>
+    <p class="muted">This posts directly into your lead qualifier backend.</p>
+
+    <form id="leadForm">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" placeholder="name@company.com" required />
+
+      <div class="row">
+        <div>
+          <label for="phone">Phone</label>
+          <input id="phone" name="phone" type="tel" placeholder="+1..." />
+        </div>
+        <div>
+          <label for="whatsapp">WhatsApp</label>
+          <input id="whatsapp" name="whatsapp" type="tel" placeholder="+66..." />
+        </div>
+      </div>
+
+      <label for="message">Message</label>
+      <textarea id="message" name="message" rows="7" placeholder="Tell us what you need..." required></textarea>
+
+      <button type="submit">Submit Lead</button>
+    </form>
+
+    <div id="status" class="status" style="display:none;"></div>
+
+    <script>
+      const form = document.getElementById("leadForm");
+      const statusBox = document.getElementById("status");
+
+      function setStatus(text) {
+        statusBox.style.display = "block";
+        statusBox.textContent = text;
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const payload = {
+          email: document.getElementById("email").value.trim(),
+          phone: document.getElementById("phone").value.trim(),
+          whatsapp: document.getElementById("whatsapp").value.trim(),
+          message: document.getElementById("message").value.trim(),
+        };
+
+        setStatus("Submitting...");
+
+        try {
+          const res = await fetch("/lead", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            setStatus(`Error (${res.status}): ${data.error || "Request failed"}`);
+            return;
+          }
+
+          setStatus(`Submitted. Label: ${data.label || "N/A"} | Score: ${data?.scores?.netScore ?? "N/A"}`);
+          form.reset();
+        } catch (err) {
+          setStatus(`Network error: ${err?.message || err}`);
+        }
+      });
+    </script>
+  </body>
+</html>

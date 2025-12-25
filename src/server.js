@@ -7,6 +7,9 @@ const { WebClient } = require("@slack/web-api");
 const app = express();
 app.use(express.json()); // for JSON bodies
 
+const path = require("path");
+app.use(express.static(path.join(__dirname, "..", "public")));
+
 const PORT = process.env.PORT || 3000;
 
 const nodemailer = require("nodemailer");
@@ -188,7 +191,7 @@ app.post("/lead", async (req, res) => {
       emailStatus = "sent";
     } catch (err) {
       emailStatus = "failed";
-      emailError = err?.message || "email error";
+      emailError = err?.message || "unknown email error";
     }
   }
 
